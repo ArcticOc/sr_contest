@@ -22,8 +22,8 @@ def calc_and_print_PSNR():
         output_psnr[1] += cv2.PSNR(original_image, cv2.resize(input_image, (w, h), interpolation=cv2.INTER_NEAREST))
         output_psnr[2] += cv2.PSNR(original_image, cv2.resize(input_image, (w, h), interpolation=cv2.INTER_LINEAR))
         output_psnr[3] += cv2.PSNR(original_image, cv2.resize(input_image, (w, h), interpolation=cv2.INTER_CUBIC))
-    with open("result.log", "w") as f:
+    with open("result.log", "a") as f:
         for label, psnr in zip(output_label, output_psnr, strict=False):
             print(f"{label}: {psnr / len(original_image_paths)}")
             f.write(f"{label}: {psnr / len(original_image_paths)}\n")
-            f.write("-------------------------------\n")
+        f.write("-------------------------------\n")

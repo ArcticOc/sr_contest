@@ -1,9 +1,9 @@
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Tuple
 
-import numpy as np
 import PIL
-from PIL import Image
+from PIL.Image import Image
 from torch import Tensor
 from torch.utils import data
 from torchvision import transforms
@@ -11,75 +11,55 @@ from torchvision import transforms
 from .config import args
 
 
-class CachedDataSet(data.Dataset):
-    def __init__(self, high_resolution_image_path: Path, low_resolution_image_path: Path, cache_dir: Path):
-        self.high_resolution_image_path = high_resolution_image_path
-        self.low_resolution_image_path = low_resolution_image_path
-        self.cache_dir = cache_dir
-        self.images = list(high_resolution_image_path.iterdir())
-        self.cache = {}
-
-        # Convert images to .npy format and save in cache_dir if not already converted
-        self._prepare_cache()
-
-    def _prepare_cache(self):
-        for image_path in self.images:
-            cache_path = self.cache_dir / (image_path.stem + '.npy')
-            if not cache_path.exists():
-                high_res_image = np.array(PIL.Image.open(image_path))
-                low_res_image = np.array(
-                    PIL.Image.open(
-                        self.low_resolution_image_path / image_path.relative_to(self.high_resolution_image_path)
-                    )
-                )
-                np.save(cache_path, {'high': high_res_image, 'low': low_res_image})
+class DataSetBase(data.Dataset, ABC):
+    def __init__(self, image_path: Path):
+        self.images = list(image_path.iterdir())
+        self.max_num_sample = len(self.images)
 
     def __len__(self) -> int:
-        return len(self.images)
+        return self.max_num_sample
+
+    @abstractmethod
+    def get_low_resolution_image(self, image: Image, path: Path) -> Image:
+        pass
+
+    def preprocess_high_resolution_image(self, image: Image) -> Image:
+        return image
 
     def __getitem__(self, index) -> Tuple[Tensor, Tensor]:
-        if index not in self.cache:
-            image_path = self.images[index % len(self.images)]
-            cache_path = self.cache_dir / (image_path.stem + '.npy')
-            data = np.load(cache_path, allow_pickle=True).item()
+        image_path = self.images[index % len(self.images)]
+        high_resolution_image = self.preprocess_high_resolution_image(PIL.Image.open(image_path))
+        low_resolution_image = self.get_low_resolution_image(high_resolution_image, image_path)
+        return transforms.ToTensor()(low_resolution_image), transforms.ToTensor()(high_resolution_image)
 
-            high_resolution_image = PIL.Image.fromarray(data['high'])
-            low_resolution_image = PIL.Image.fromarray(data['low'])
 
-            high_resolution_image = self.preprocess_high_resolution_image(high_resolution_image)
-            low_resolution_image = self.preprocess_low_resolution_image(low_resolution_image)
+class TrainDataSet(DataSetBase):
+    def __init__(self, image_path: Path, num_image_per_epoch: int = 2000):
+        super().__init__(image_path)
+        self.max_num_sample = num_image_per_epoch
 
-            self.cache[index] = (
-                transforms.ToTensor()(low_resolution_image),
-                transforms.ToTensor()(high_resolution_image),
-            )
-        return self.cache[index]
+    def get_low_resolution_image(self, image: Image, path: Path) -> Image:
+        return transforms.Resize((image.size[0] // 4, image.size[1] // 4), transforms.InterpolationMode.BICUBIC)(
+            image.copy()
+        )
 
     def preprocess_high_resolution_image(self, image: Image) -> Image:
         return transforms.Compose(
             [transforms.RandomCrop(size=512), transforms.RandomHorizontalFlip(), transforms.RandomVerticalFlip()]
         )(image)
 
-    def preprocess_low_resolution_image(self, image: Image) -> Image:
-        return image
+
+class ValidationDataSet(DataSetBase):
+    def __init__(self, high_resolution_image_path: Path, low_resolution_image_path: Path):
+        super().__init__(high_resolution_image_path)
+        self.high_resolution_image_path = high_resolution_image_path
+        self.low_resolution_image_path = low_resolution_image_path
+
+    def get_low_resolution_image(self, image: Image, path: Path) -> Image:
+        return PIL.Image.open(self.low_resolution_image_path / path.relative_to(self.high_resolution_image_path))
 
 
-def get_cached_dataset() -> Tuple[CachedDataSet, CachedDataSet]:
-    train_cache_dir = Path(args.train_cache_dir)
-    val_cache_dir = Path(args.val_cache_dir)
-    train_cache_dir.mkdir(parents=True, exist_ok=True)
-    val_cache_dir.mkdir(parents=True, exist_ok=True)
-
-    train_dataset = CachedDataSet(
-        high_resolution_image_path=Path(args.train_data_path),
-        low_resolution_image_path=Path(args.train_low_res_data_path),
-        cache_dir=train_cache_dir,
+def get_dataset() -> Tuple[TrainDataSet, ValidationDataSet]:
+    return TrainDataSet(Path(args.train_data_path), 850 * 10), ValidationDataSet(
+        Path(args.val_ori_data_path), Path(args.val_025_data_path)
     )
-
-    validation_dataset = CachedDataSet(
-        high_resolution_image_path=Path(args.val_ori_data_path),
-        low_resolution_image_path=Path(args.val_025_data_path),
-        cache_dir=val_cache_dir,
-    )
-
-    return train_dataset, validation_dataset

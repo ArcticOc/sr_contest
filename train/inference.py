@@ -37,8 +37,8 @@ def inference_onnxruntime():
         output_image = cv2.cvtColor((output_image.transpose((0, 2, 3, 1))[0] * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
         cv2.imwrite(str(output_path), output_image)
 
-    print(f"inference time: {(end_time - start_time).total_seconds() / len(input_images)}[s/image]")
+    inference_time = (end_time - start_time).total_seconds() / len(input_images)
+    print(f"inference time: {inference_time}[s/image]")
 
-    with open("result.log", "w") as f:
-        f.write("-------------------------------\n")
-        f.write(f"inference time: {(end_time - start_time).total_seconds() / len(input_images)}[s/image]")
+    with open("result.log", "a") as f:
+        f.write(f"inference time: {inference_time}[s/image]\n")

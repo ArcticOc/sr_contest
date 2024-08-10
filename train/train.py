@@ -84,7 +84,7 @@ def train(rank, world_size):
                 for image1, image2 in zip(output, high_resolution_image, strict=False):
                     train_psnr += calc_psnr(image1, image2)
 
-            scheduler.update()
+            scheduler.step()
 
             # 検証
             ddp_model.eval()

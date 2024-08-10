@@ -1,1 +1,1 @@
-torchrun --nproc_per_node=4 main.py --learning-rate=1e-4
+torchrun --nproc_per_node=4 main.py --learning-rate=1e-4 --batch-size=200
