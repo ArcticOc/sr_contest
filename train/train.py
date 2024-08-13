@@ -2,11 +2,10 @@ import cv2
 import numpy as np
 import torch
 import torch.distributed as dist
-from torch import GradScaler, Tensor, autocast, nn
+from torch import Tensor, nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
-from torch.utils import data
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from tqdm import tqdm, trange
@@ -17,6 +16,7 @@ from .model import ESPCN4x
 
 
 def train(rank, world_size):
+    torch.backends.cudnn.benchmark = True
     to_image = transforms.ToPILImage()
 
     def calc_psnr(image1: Tensor, image2: Tensor):
@@ -28,29 +28,15 @@ def train(rank, world_size):
         device = torch.device(f"cuda:{rank}")
         torch.cuda.set_device(device)
         model = ESPCN4x().to(device)
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         ddp_model = DDP(model, device_ids=[rank])
-        scaler = GradScaler("cuda")
     else:
         device = torch.device("cpu")
         model = ESPCN4x().to(device)
-        scaler = GradScaler("cpu")
 
-    writer = SummaryWriter("log")
+    writer = SummaryWriter(f"log/{args.writer_name}")
 
-    train_dataset, validation_dataset = get_dataset()
-
-    train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset, num_replicas=world_size, rank=rank)
-    train_data_loader = data.DataLoader(
-        train_dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=args.num_workers,
-        pin_memory=True,
-        sampler=train_sampler,
-    )
-    validation_data_loader = data.DataLoader(
-        validation_dataset, batch_size=1, shuffle=False, num_workers=args.num_workers
-    )
+    train_data_loader, validation_data_loader, train_sampler = get_dataset(world_size, rank)
 
     optimizer = Adam(ddp_model.parameters(), lr=args.learning_rate)
     scheduler = MultiStepLR(optimizer, milestones=[30, 50, 65, 80, 90], gamma=0.7)
@@ -73,16 +59,14 @@ def train(rank, world_size):
                 high_resolution_image = high_resolution_image.to(device)
                 optimizer.zero_grad()
 
-                with autocast('cuda' if torch.cuda.is_available() else 'cpu'):
-                    output = ddp_model(low_resolution_image)
-                    loss = criterion(output, high_resolution_image)
+                output = ddp_model(low_resolution_image)
+                loss = criterion(output, high_resolution_image)
 
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
+                loss.backward()
                 train_loss += loss.item() * low_resolution_image.size(0)
                 for image1, image2 in zip(output, high_resolution_image, strict=False):
                     train_psnr += calc_psnr(image1, image2)
+                optimizer.step()
 
             scheduler.step()
 
@@ -101,18 +85,18 @@ def train(rank, world_size):
                 for idx, (low_resolution_image, high_resolution_image) in enumerate(data_loader):
                     low_resolution_image = low_resolution_image.to(device)
                     high_resolution_image = high_resolution_image.to(device)
-                    with autocast('cuda' if torch.cuda.is_available() else 'cpu'):
-                        output = ddp_model(low_resolution_image)
-                        loss = criterion(output, high_resolution_image)
+
+                    output = ddp_model(low_resolution_image)
+                    loss = criterion(output, high_resolution_image)
                     validation_loss += loss.item() * low_resolution_image.size(0)
                     for image1, image2 in zip(output, high_resolution_image, strict=False):
                         validation_psnr += calc_psnr(image1, image2)
             if rank == 0:
-                writer.add_scalar("train/loss", train_loss / len(train_dataset), epoch)
-                writer.add_scalar("train/psnr", train_psnr / len(train_dataset), epoch)
-                writer.add_scalar("validation/loss", validation_loss / len(validation_dataset), epoch)
-                writer.add_scalar("validation/psnr", validation_psnr / len(validation_dataset), epoch)
-                writer.add_image("output", output[0], epoch)
+                writer.add_scalar("train/loss", train_loss, epoch)
+                writer.add_scalar("train/psnr", train_psnr, epoch)
+                writer.add_scalar("validation/loss", validation_loss, epoch)
+                writer.add_scalar("validation/psnr", validation_psnr, epoch)
+                # writer.add_image("output", output[0], epoch)
         except Exception as ex:
             print(f"EPOCH[{epoch}] ERROR: {ex}")
 
@@ -120,7 +104,7 @@ def train(rank, world_size):
 
     # モデル生成
     if rank == 0:
-        torch.save(ddp_model.module.state_dict(), "output/model.pth")
+        # torch.save(ddp_model.module.state_dict(), "output/model.pth")
 
         ddp_model.module.to(torch.device("cpu"))
         dummy_input = torch.randn(1, 3, 128, 128, device="cpu")

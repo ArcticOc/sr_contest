@@ -1,9 +1,9 @@
 import torch
 import torch.distributed as dist
 
+from train.compare import calc_and_print_PSNR
 from train.config import args
-from train.eval import calc_and_print_PSNR
-from train.inference import inference_onnxruntime
+from train.inference import Qinference
 from train.train import train
 
 if __name__ == "__main__":
@@ -17,5 +17,8 @@ if __name__ == "__main__":
         train(rank, world_size)
 
     if rank == 0:
-        inference_onnxruntime()
+        Qinference().inference_onnxruntime()
         calc_and_print_PSNR()
+
+    if args.only_eval:
+        dist.destroy_process_group()

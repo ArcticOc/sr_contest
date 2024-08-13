@@ -3,9 +3,11 @@ from pathlib import Path
 from typing import Tuple
 
 import PIL
+import torch
 from PIL.Image import Image
 from torch import Tensor
 from torch.utils import data
+from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from .config import args
@@ -59,7 +61,20 @@ class ValidationDataSet(DataSetBase):
         return PIL.Image.open(self.low_resolution_image_path / path.relative_to(self.high_resolution_image_path))
 
 
-def get_dataset() -> Tuple[TrainDataSet, ValidationDataSet]:
-    return TrainDataSet(Path(args.train_data_path), 850 * 10), ValidationDataSet(
-        Path(args.val_ori_data_path), Path(args.val_025_data_path)
+def get_dataset(world_size, rank) -> Tuple[DataLoader, DataLoader]:
+    train_dataset = TrainDataSet(Path(args.train_data_path), args.num_image_per_epoch)
+    val_dataset = ValidationDataSet(Path(args.val_ori_data_path), Path(args.val_025_data_path))
+
+    train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset, num_replicas=world_size, rank=rank)
+    train_data_loader = data.DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        sampler=train_sampler,
+        prefetch_factor=3,
     )
+    validation_data_loader = data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=args.num_workers)
+
+    return train_data_loader, validation_data_loader, train_sampler
