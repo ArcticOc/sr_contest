@@ -1,4 +1,4 @@
-import datetime  # noqa: I001
+import datetime
 from pathlib import Path
 
 import cv2
@@ -7,48 +7,19 @@ import onnx
 import onnxoptimizer as optimizer
 import onnxruntime as ort
 
-from onnxruntime.quantization import CalibrationDataReader, QuantFormat, QuantType, quantize_static
-
 from .config import args
-
-
-class MyCalibrationDataReader(CalibrationDataReader):
-    def __init__(self, calibration_image_dir):
-        self.image_paths = list(Path(calibration_image_dir).iterdir())
-        self.index = 0
-
-    def get_next(self):
-        if self.index >= len(self.image_paths):
-            return None
-
-        image_path = self.image_paths[self.index]
-        self.index += 1
-
-        input_image = cv2.imread(str(image_path))
-        input_image = (
-            np.array([cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB).transpose((2, 0, 1))], dtype=np.float32) / 255
-        )
-
-        return {"input": input_image}
-
-    def rewind(self):
-        self.index = 0
 
 
 class Qinference:
     def __init__(
         self,
-        model_path=args.model_path,
-        quant_model_path=args.quant_model_path,
+        model_path=f"output/{args.model_type}/{args.model_type}.onnx",
         input_image_dir=args.val_025_data_path,
-        calibration_dir=args.val_ori_data_path,
         output_image_dir="output/img",
     ):
         self.model_path = model_path
-        self.quant_model_path = quant_model_path
         self.input_image_dir = input_image_dir
         self.output_image_dir = output_image_dir
-        self.calibration_dir = calibration_dir
 
     def optimize_model(self):
         model = onnx.load(self.model_path)
@@ -82,41 +53,15 @@ class Qinference:
 
         self.model_path = optimized_model_path
 
-    def static_quantize(self):
-        self.optimize_model()
-        calibration_data_reader = MyCalibrationDataReader(self.calibration_dir)
-        quantize_static(
-            self.model_path,
-            self.quant_model_path,
-            calibration_data_reader,
-            quant_format=QuantFormat.QDQ,
-            per_channel=True,
-            reduce_range=True,
-            activation_type=QuantType.QUInt8,
-            weight_type=QuantType.QInt8,
-        )
-        print(f"Model has been quantized and saved to {self.quant_model_path}")
-
     def inference_onnxruntime(self):
-        infer_path = self.quant_model_path if args.quant_eval else self.model_path
-
         input_image_dir = Path(self.input_image_dir)
         output_image_dir = Path(self.output_image_dir)
         output_image_dir.mkdir(exist_ok=True, parents=True)
-        if args.quant_eval:
-            if Path(self.quant_model_path).exists():
-                print(f"Quantized model already exists at {self.quant_model_path}. Skipping quantization.")
-            else:
-                print("Quantizing model...")
-                self.static_quantize()
-        else:
-            print("Inference without quantization.")
 
-        session_options = ort.SessionOptions()
-        # session_options.log_severity_level = 1
-        sess = ort.InferenceSession(
-            infer_path, session_options, providers=['CUDAExecutionProvider', 'CPUExecutionProvider']
-        )
+        print("Optimizing model...")
+        self.optimize_model()
+
+        sess = ort.InferenceSession(self.model_path, providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
         input_images = []
         output_images = []
         output_paths = []

@@ -15,6 +15,7 @@ if __name__ == "__main__":
 
     if not args.only_eval:
         train(rank, world_size)
+        torch.cuda.empty_cache()
 
     if rank == 0:
         Qinference().inference_onnxruntime()

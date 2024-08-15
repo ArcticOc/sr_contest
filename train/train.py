@@ -1,3 +1,6 @@
+import importlib
+from pathlib import Path
+
 import cv2
 import numpy as np
 import torch
@@ -12,12 +15,23 @@ from tqdm import tqdm, trange
 
 from .config import args
 from .dataset import get_dataset
-from .model import ESPCN4x
+
+
+def load_model(module_name, class_name='ESPCN4x', relative_to=None):
+    if relative_to:
+        module_name = f'{relative_to}.{module_name}'
+    try:
+        module = importlib.import_module(module_name)
+        model_class = getattr(module, class_name)
+        return model_class
+    except (ModuleNotFoundError, AttributeError) as e:
+        raise ImportError(f"Could not load {class_name} from {module_name}: {e}") from None
 
 
 def train(rank, world_size):
     torch.backends.cudnn.benchmark = True
     to_image = transforms.ToPILImage()
+    ESPCN4x = load_model(f'{args.model_type}', 'ESPCN4x', 'train.model')
 
     def calc_psnr(image1: Tensor, image2: Tensor):
         image1 = cv2.cvtColor((np.array(to_image(image1))).astype(np.uint8), cv2.COLOR_RGB2BGR)
@@ -104,14 +118,16 @@ def train(rank, world_size):
 
     # モデル生成
     if rank == 0:
-        # torch.save(ddp_model.module.state_dict(), "output/model.pth")
+        output_model_dir = Path(f"output/{args.model_type}/{args.model_type}")
+        output_model_dir.mkdir(parents=True, exist_ok=True)
+        # torch.save(ddp_model.module.state_dict(), f"output/{args.model_type}.pth")
 
         ddp_model.module.to(torch.device("cpu"))
         dummy_input = torch.randn(1, 3, 128, 128, device="cpu")
         torch.onnx.export(
             model,
             dummy_input,
-            "output/model.onnx",
+            f"{output_model_dir}.onnx",
             opset_version=17,
             input_names=["input"],
             output_names=["output"],

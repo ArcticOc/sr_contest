@@ -12,4 +12,12 @@
 #   done
 # done
 
-torchrun --nproc_per_node=4 main.py --lr=1e-3 --batch-size=60 --nipe=4250 --num-epoch=60 --only-eval --quant-eval
+# torchrun --nproc_per_node=4 main.py --lr=1e-3 --batch-size=25 --nipe=4250 --num-epoch=1 --model-type=model7
+# torchrun --nproc_per_node=4 main.py --lr=1e-3 --batch-size=20 --nipe=4250 --num-epoch=120 --model-type=model
+# torchrun --nproc_per_node=4 main.py --only-eval --model-type=model
+
+for m in {2..8};
+do
+    echo "Model${m}_result" >> result.log
+    torchrun --nproc_per_node=4 main.py --lr=1e-3 --batch-size=25 --nipe=8500 --num-epoch=120 --model-type=model${m}
+done
