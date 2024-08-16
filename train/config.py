@@ -10,6 +10,7 @@ DEFAULT_NUM_WORKERS = 16
 DEFAULT_NUM_EPOCH = 100
 DEFAULT_NUM_IMAGE_PER_EPOCH = 2000
 DEFAULT_LEARNING_RATE = 1e-3
+DEFAULT_WARMUP_FACTOR = 0.1
 DEFAULT_ONLY_EVAL = False
 DEFAULT_WRITER_NAME = "default"
 
@@ -33,6 +34,9 @@ def arg_parse():
         help="number of images per epoch",
     )
     parser.add_argument("--lr", dest="learning_rate", type=float, default=DEFAULT_LEARNING_RATE, help="learning rate")
+    parser.add_argument(
+        "--warmup-factor", type=float, default=DEFAULT_WARMUP_FACTOR, help="warmup factor (from 0 to 1)"
+    )
     parser.add_argument("--writer-name", type=str, default=DEFAULT_WRITER_NAME, help="writer name")
     parser.add_argument("--only-eval", action="store_true", default=DEFAULT_ONLY_EVAL, help="only eval")
 

@@ -38,6 +38,7 @@ class ESPCN4x(nn.Module):
         self.conv_mid = nn.Conv2d(64, 64, 3, 1, 1)
         self.conv_out = nn.Conv2d(64, 16, 3, 1, 1)
         self.pixel_shuffle = nn.PixelShuffle(self.scale)
+        self._initialize_weights()
 
     def forward(self, x):
         x = x.reshape(-1, 1, x.shape[-2], x.shape[-1])
