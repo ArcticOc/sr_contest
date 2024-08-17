@@ -8,14 +8,16 @@ import torch
 import torch.distributed as dist
 from torch import Tensor, nn
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.optim import Adam
-from torch.optim.lr_scheduler import MultiStepLR
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from tqdm import tqdm, trange
 
 from .config import args
 from .dataset import get_dataset
+
+warmup_epochs = args.num_epoch * args.warmup_factor
 
 
 def load_model(module_name, class_name='ESPCN4x', relative_to=None):
@@ -29,12 +31,20 @@ def load_model(module_name, class_name='ESPCN4x', relative_to=None):
         raise ImportError(f"Could not load {class_name} from {module_name}: {e}") from None
 
 
+# def lr_lambda(epoch):
+#     warmup_epochs = args.num_epoch * args.warmup_factor
+#     if epoch < warmup_epochs:
+#         return epoch / warmup_epochs
+#     else:
+#         return 0.5 * (1 + math.cos((epoch - warmup_epochs) / args.num_epoch * math.pi))
 def lr_lambda(epoch):
-    warmup_epochs = args.num_epoch * args.warmup_factor
     if epoch < warmup_epochs:
         return epoch / warmup_epochs
     else:
-        return 0.5 * (1 + math.cos((epoch - warmup_epochs) / args.num_epoch * math.pi))
+        return max(
+            0.5 * (1 + math.cos((epoch - warmup_epochs) / (args.num_epoch - warmup_epochs) * math.pi)),
+            args.min_lr / args.learning_rate,
+        )
 
 
 def train(rank, world_size):
@@ -63,11 +73,19 @@ def train(rank, world_size):
 
     # optimizer = Adam(ddp_model.parameters(), lr=args.learning_rate)
     # scheduler = LambdaLR(optimizer, lr_lambda)
-    optimizer = Adam(ddp_model.parameters(), lr=args.learning_rate)
-    scheduler = MultiStepLR(optimizer, milestones=[30, 50, 65, 80, 90], gamma=0.7)
+    # optimizer = Adam(ddp_model.parameters(), lr=args.learning_rate)
+    # scheduler = MultiStepLR(optimizer, milestones=[30, 50, 65, 80, 90], gamma=0.7)
+
+    optimizer = AdamW(ddp_model.parameters(), lr=args.learning_rate, weight_decay=1e-5)
+
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=40, T_mult=2, eta_min=0.01 * args.learning_rate)
     criterion = nn.MSELoss()
 
     for epoch in trange(args.num_epoch, desc="EPOCH"):
+        if epoch < warmup_epochs:
+            lr_scale = min(1.0, float(epoch + 1) / warmup_epochs)
+            for pg in optimizer.param_groups:
+                pg['lr'] = lr_scale * args.learning_rate
         train_sampler.set_epoch(epoch)
         try:
             # 学習

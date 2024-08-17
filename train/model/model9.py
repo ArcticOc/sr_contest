@@ -1,3 +1,5 @@
+# Lightweight IMDN
+
 import torch
 from torch import nn
 
@@ -58,9 +60,9 @@ class ESPCN4x(nn.Module):
     def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.normal_(m.weight, mean=0, std=0.001)
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='leaky_relu')
                 if m.bias is not None:
-                    nn.init.zeros_(m.bias)
+                    nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
         x = self.act(self.conv_1(x))
