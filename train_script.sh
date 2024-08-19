@@ -17,9 +17,9 @@
 # torchrun --nproc_per_node=4 main.py --only-eval --model-type=model12
 
 
-model=(3 11)
+model=(1 2 3 4 5 9 11)
 for m in ${model[@]};
 do
     echo "Model${m}_result" >> result.log
-    torchrun --nproc_per_node=4 main.py --lr=1e-4 --batch-size=100 --nipe=10000 --num-epoch=120 --model-type=model${m}
+    torchrun --nproc_per_node=4 main.py --lr=1e-3 --batch-size=15 --nipe=8500 --num-epoch=120 --model-type=model${m}
 done

@@ -31,12 +31,6 @@ def load_model(module_name, class_name='ESPCN4x', relative_to=None):
         raise ImportError(f"Could not load {class_name} from {module_name}: {e}") from None
 
 
-# def lr_lambda(epoch):
-#     warmup_epochs = args.num_epoch * args.warmup_factor
-#     if epoch < warmup_epochs:
-#         return epoch / warmup_epochs
-#     else:
-#         return 0.5 * (1 + math.cos((epoch - warmup_epochs) / args.num_epoch * math.pi))
 def lr_lambda(epoch):
     if epoch < warmup_epochs:
         return epoch / warmup_epochs
@@ -71,14 +65,9 @@ def train(rank, world_size):
 
     train_data_loader, validation_data_loader, train_sampler = get_dataset(world_size, rank)
 
-    # optimizer = Adam(ddp_model.parameters(), lr=args.learning_rate)
-    # scheduler = LambdaLR(optimizer, lr_lambda)
-    # optimizer = Adam(ddp_model.parameters(), lr=args.learning_rate)
-    # scheduler = MultiStepLR(optimizer, milestones=[30, 50, 65, 80, 90], gamma=0.7)
-
     optimizer = AdamW(ddp_model.parameters(), lr=args.learning_rate, weight_decay=1e-5)
 
-    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=40, T_mult=2, eta_min=0.01 * args.learning_rate)
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=0.01 * args.learning_rate)
     criterion = nn.MSELoss()
 
     for epoch in trange(args.num_epoch, desc="EPOCH"):
