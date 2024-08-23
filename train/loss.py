@@ -102,3 +102,14 @@ class CombinedLoss(nn.Module):
         perceptual_loss = self.perceptual(pred, target)
         edge_loss = self.edge(pred, target)
         return 0.5 * l1_loss + 0.3 * perceptual_loss + 0.2 * edge_loss
+
+
+class LossProxy:
+    def __init__(self):
+        pass
+
+    def get_loss(self, loss_name):
+        loss_class = globals().get(loss_name)
+        if loss_class is None:
+            raise ValueError(f"Loss function '{loss_name}' is not defined.")
+        return loss_class()

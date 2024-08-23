@@ -1,52 +1,16 @@
 -------------------------------
-Model1_result
-Inference time: 0.5763 [s/image]
-ESPCN: 27.571957494821813
-NEAREST: 25.760064288057237
-BILINEAR: 26.42903548566639
-BICUBIC: 27.073842907703565
--------------------------------
 Model2_result
-Inference time: 0.0997 [s/image]
-ESPCN: 27.813796051293462
+Inference time: 0.0925 [s/image]
+ESPCN: 27.27193159351073
 NEAREST: 25.760064288057237
 BILINEAR: 26.42903548566639
 BICUBIC: 27.073842907703565
 -------------------------------
-Model3_result
-Inference time: 0.2497 [s/image]
-ESPCN: 27.930666723163437
+Model2_result with lossMSELoss
+Inference time: 0.0878 [s/image]
+ESPCN: 27.127462745433668
 NEAREST: 25.760064288057237
 BILINEAR: 26.42903548566639
 BICUBIC: 27.073842907703565
 -------------------------------
-Model4_result
-Inference time: 0.7003 [s/image]
-ESPCN: 28.52575510616625
-NEAREST: 25.760064288057237
-BILINEAR: 26.42903548566639
-BICUBIC: 27.073842907703565
--------------------------------
-Model5_result
-Model6_result
-Model9_result
-Inference time: 0.2543 [s/image]
-ESPCN: 28.263414375708706
-NEAREST: 25.760064288057237
-BILINEAR: 26.42903548566639
-BICUBIC: 27.073842907703565
--------------------------------
-Model11_result
-Inference time: 0.2466 [s/image]
-ESPCN: 28.304012766970356
-NEAREST: 25.760064288057237
-BILINEAR: 26.42903548566639
-BICUBIC: 27.073842907703565
--------------------------------
-Model5_result
-Inference time: 0.0703 [s/image]
-ESPCN: 27.46104927710241
-NEAREST: 25.760064288057237
-BILINEAR: 26.42903548566639
-BICUBIC: 27.073842907703565
 -------------------------------

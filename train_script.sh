@@ -14,7 +14,7 @@
 # 2 9 11 -- 3 12
 # torchrun --nproc_per_node=4 main.py --lr=1e-3 --batch-size=20 --nipe=4250 --num-epoch=100 --model-type=model4
 # torchrun --nproc_per_node=4 main.py --lr=1e-4 --batch-size=100 --nipe=4250 --num-epoch=60 --model-type=model11
-# torchrun --nproc_per_node=4 main.py --only-eval --model-type=model12
+# torchrun --nproc_per_node=4 main.py --only-eval --model-type=model5
 
 
 # model=(4)
@@ -35,9 +35,13 @@
 #         done
 #     done
 # done
-model=(5)
+model=(2)
+loss=('MSELoss' 'L1Loss' 'VGGPerceptualLoss' 'AdversarialLoss' 'CharbonnierLoss' 'EdgeLoss' 'CombinedLoss')
 for m in ${model[@]};
 do
-    echo "Model${m}_result" >> result.log
-    torchrun --nproc_per_node=4 main.py --lr=1e-3 --batch-size=15 --nipe=8500 --num-epoch=120 --model-type=model${m}
+    for l in ${loss[@]};
+    do
+        echo "Model${m}_result with loss${l}" >> result.log
+        torchrun --nproc_per_node=4 main.py --lr=1e-3 --batch-size=15 --nipe=8500 --num-epoch=120 --model-type=model${m} --loss=${l}
+    done
 done

@@ -13,6 +13,7 @@ DEFAULT_LEARNING_RATE = 1e-3
 DEFAULT_WARMUP_FACTOR = 0.1
 DEFAULT_ONLY_EVAL = False
 DEFAULT_WRITER_NAME = "default"
+DEFAULT_LOSS = "mse"
 
 
 def arg_parse():
@@ -39,6 +40,7 @@ def arg_parse():
     )
     parser.add_argument("--writer-name", type=str, default=DEFAULT_WRITER_NAME, help="writer name")
     parser.add_argument("--only-eval", action="store_true", default=DEFAULT_ONLY_EVAL, help="only eval")
+    parser.add_argument("--loss", type=str, default=DEFAULT_LOSS, help="loss function")
 
     return parser.parse_args()
 

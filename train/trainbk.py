@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import torch
 import torch.distributed as dist
-from torch import Tensor
+from torch import Tensor, nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import AdamW
 from torch.utils.tensorboard import SummaryWriter
@@ -15,7 +15,6 @@ from tqdm import tqdm, trange
 
 from .config import args
 from .dataset import get_dataset
-from .loss import LossProxy
 
 
 class WarmupCosineAnnealingLR(torch.optim.lr_scheduler._LRScheduler):
@@ -43,7 +42,7 @@ class WarmupCosineAnnealingLR(torch.optim.lr_scheduler._LRScheduler):
             ]
 
 
-def load_model(module_name, class_name='XLSR_quantization', relative_to=None):
+def load_model(module_name, class_name='ESPCN4x', relative_to=None):
     if relative_to:
         module_name = f'{relative_to}.{module_name}'
     try:
@@ -57,7 +56,7 @@ def load_model(module_name, class_name='XLSR_quantization', relative_to=None):
 def train(rank, world_size):
     torch.backends.cudnn.benchmark = True
     to_image = transforms.ToPILImage()
-    XLSR_quantization = load_model(f'{args.model_type}', 'XLSR_quantization', 'train.model')
+    ESPCN4x = load_model(f'{args.model_type}', 'ESPCN4x', 'train.model')
 
     def calc_psnr(image1: Tensor, image2: Tensor):
         image1 = cv2.cvtColor((np.array(to_image(image1))).astype(np.uint8), cv2.COLOR_RGB2BGR)
@@ -67,12 +66,12 @@ def train(rank, world_size):
     if torch.cuda.is_available():
         device = torch.device(f"cuda:{rank}")
         torch.cuda.set_device(device)
-        model = XLSR_quantization().to(device)
+        model = ESPCN4x().to(device)
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         ddp_model = DDP(model, device_ids=[rank])
     else:
         device = torch.device("cpu")
-        model = XLSR_quantization(SR_rate=args.sr_rate).to(device)
+        model = ESPCN4x().to(device)
 
     writer = SummaryWriter(f"log/{args.writer_name}")
 
@@ -86,12 +85,12 @@ def train(rank, world_size):
         eta_min=0.01 * args.learning_rate,
     )
 
-    criterion = LossProxy().get_loss(args.loss)
+    criterion = nn.MSELoss()
 
     for epoch in trange(args.num_epoch, desc="EPOCH"):
         train_sampler.set_epoch(epoch)
         try:
-            # Training
+            # 学習
             ddp_model.train()
             train_loss = 0.0
             train_psnr = 0.0
@@ -116,7 +115,7 @@ def train(rank, world_size):
 
             scheduler.step()
 
-            # Validation
+            # 検証
             ddp_model.eval()
             validation_loss = 0.0
             validation_psnr = 0.0
@@ -142,32 +141,22 @@ def train(rank, world_size):
                 writer.add_scalar("train/psnr", train_psnr, epoch)
                 writer.add_scalar("validation/loss", validation_loss, epoch)
                 writer.add_scalar("validation/psnr", validation_psnr, epoch)
+                # writer.add_image("output", output[0], epoch)
         except Exception as ex:
             print(f"EPOCH[{epoch}] ERROR: {ex}")
 
     writer.close()
 
+    # モデル生成
     if rank == 0:
         output_model_dir = Path(f"output/{args.model_type}/{args.model_type}")
         output_model_dir.mkdir(parents=True, exist_ok=True)
+        # torch.save(ddp_model.module.state_dict(), f"output/{args.model_type}.pth")
 
-        # Move the model to CPU for quantization
         ddp_model.module.to(torch.device("cpu"))
-
-        # Perform dynamic quantization
-        quantized_model = torch.quantization.quantize_dynamic(
-            ddp_model.module,
-            {torch.nn.Linear, torch.nn.Conv2d},  # Specify the layers to quantize
-            dtype=torch.qint8,
-        )
-
-        # Save the quantized model
-        # torch.save(quantized_model.state_dict(), f"{output_model_dir}_quantized.pth")
-
-        # Export to ONNX (note: ONNX export might not fully support quantized models)
         dummy_input = torch.randn(1, 3, 128, 128, device="cpu")
         torch.onnx.export(
-            quantized_model,
+            model,
             dummy_input,
             f"{output_model_dir}.onnx",
             opset_version=17,

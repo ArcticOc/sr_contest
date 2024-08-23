@@ -84,7 +84,7 @@ class ESPCN4x(nn.Module):
 
 
 class XLSR_quantization(nn.Module):
-    def __init__(self, SR_rate):
+    def __init__(self, SR_rate=4):
         super().__init__()
         self.quant = QuantStub()
         self.dequant = DeQuantStub()
@@ -124,4 +124,4 @@ class XLSR_quantization(nn.Module):
             if isinstance(m, ConvRelu):
                 torch.quantization.fuse_modules(m, ['conv', 'relu'], inplace=True)
             if isinstance(m, Gblock):
-                torch.quantization.fuse_modules(m, ['conv0', 'relu'], inplace=True)
+                torch.quantization.fuse_modules(m, ['conv1', 'relu'], inplace=True)
