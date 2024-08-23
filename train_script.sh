@@ -17,7 +17,25 @@
 # torchrun --nproc_per_node=4 main.py --only-eval --model-type=model12
 
 
-model=(1 2 3 4 5 9 11)
+# model=(4)
+# epoch=(100 120)
+# nipe=(4250 8500)
+# lr=('1e-3' '1e-4')
+# for e in ${epoch[@]};
+# do
+#     for n in ${nipe[@]};
+#     do
+#         for l in ${lr[@]};
+#         do
+#             for m in ${model[@]};
+#             do
+#                 echo "Model${m}_lr:${l}-NIPE:${n}-Epoch:${e}" >> result.log
+#                 torchrun --nproc_per_node=4 main.py --lr=${l} --batch-size=20 --nipe=${n} --num-epoch=${e} --model-type=model${m}
+#             done
+#         done
+#     done
+# done
+model=(5)
 for m in ${model[@]};
 do
     echo "Model${m}_result" >> result.log

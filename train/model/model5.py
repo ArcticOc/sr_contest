@@ -23,7 +23,7 @@ class ConvRelu(nn.Module):
 
 
 class ESPCN4x(nn.Module):
-    def __init__(self, scale_factor, num_channels=1, d=64):
+    def __init__(self, scale_factor=4, num_channels=3, d=64):
         super(ESPCN4x, self).__init__()
         self.first_part = nn.Sequential(
             ConvRelu(num_channels, d, kernel_size=5),

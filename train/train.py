@@ -9,7 +9,6 @@ import torch.distributed as dist
 from torch import Tensor, nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from tqdm import tqdm, trange
@@ -17,7 +16,30 @@ from tqdm import tqdm, trange
 from .config import args
 from .dataset import get_dataset
 
-warmup_epochs = args.num_epoch * args.warmup_factor
+
+class WarmupCosineAnnealingLR(torch.optim.lr_scheduler._LRScheduler):
+    def __init__(self, optimizer, warmup_epochs, max_epochs, eta_min=0, last_epoch=-1):
+        self.warmup_epochs = warmup_epochs
+        self.max_epochs = max_epochs
+        self.eta_min = eta_min
+        super(WarmupCosineAnnealingLR, self).__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+        if self.last_epoch < self.warmup_epochs:
+            return [base_lr * (self.last_epoch + 1) / self.warmup_epochs for base_lr in self.base_lrs]
+        else:
+            return [
+                self.eta_min
+                + (base_lr - self.eta_min)
+                * 0.5
+                * (
+                    1
+                    + math.cos(
+                        math.pi * (self.last_epoch - self.warmup_epochs) / (self.max_epochs - self.warmup_epochs)
+                    )
+                )
+                for base_lr in self.base_lrs
+            ]
 
 
 def load_model(module_name, class_name='ESPCN4x', relative_to=None):
@@ -29,16 +51,6 @@ def load_model(module_name, class_name='ESPCN4x', relative_to=None):
         return model_class
     except (ModuleNotFoundError, AttributeError) as e:
         raise ImportError(f"Could not load {class_name} from {module_name}: {e}") from None
-
-
-def lr_lambda(epoch):
-    if epoch < warmup_epochs:
-        return epoch / warmup_epochs
-    else:
-        return max(
-            0.5 * (1 + math.cos((epoch - warmup_epochs) / (args.num_epoch - warmup_epochs) * math.pi)),
-            args.min_lr / args.learning_rate,
-        )
 
 
 def train(rank, world_size):
@@ -66,15 +78,16 @@ def train(rank, world_size):
     train_data_loader, validation_data_loader, train_sampler = get_dataset(world_size, rank)
 
     optimizer = AdamW(ddp_model.parameters(), lr=args.learning_rate, weight_decay=1e-5)
+    scheduler = WarmupCosineAnnealingLR(
+        optimizer,
+        warmup_epochs=args.warmup_factor * args.num_epoch,
+        max_epochs=args.num_epoch,
+        eta_min=0.01 * args.learning_rate,
+    )
 
-    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=0.01 * args.learning_rate)
     criterion = nn.MSELoss()
 
     for epoch in trange(args.num_epoch, desc="EPOCH"):
-        if epoch < warmup_epochs:
-            lr_scale = min(1.0, float(epoch + 1) / warmup_epochs)
-            for pg in optimizer.param_groups:
-                pg['lr'] = lr_scale * args.learning_rate
         train_sampler.set_epoch(epoch)
         try:
             # 学習
